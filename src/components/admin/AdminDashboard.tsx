@@ -32,6 +32,7 @@ import {
   Clock,
   LogOut,
   Lock,
+  Trash2,
 } from 'lucide-react';
 import {
   StoreSettings,
@@ -804,9 +805,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="text-[11px] text-slate-500 mt-1">100% QID 21+ Verified</div>
                   </div>
                   <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
-                    <div className="text-[11px] font-bold text-slate-400 uppercase">Conversion Rate</div>
-                    <div className="text-xl font-bold text-sky-700 font-mono tabular-nums mt-1">4.12%</div>
-                    <div className="text-[11px] text-emerald-600 font-semibold mt-1">Top 5% MENA Luxury</div>
+                    <div className="text-[11px] font-bold text-slate-400 uppercase">Average Order Value</div>
+                    <div className="text-xl font-bold text-sky-700 font-mono tabular-nums mt-1">
+                      {completedOrders.length > 0
+                        ? (totalSalesMinor / completedOrders.length / 100).toFixed(2)
+                        : '0.00'}{' '}
+                      QAR
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('analytics')}
+                      className="text-[11px] text-emerald-700 font-semibold mt-1 hover:underline"
+                    >
+                      Open Live View &amp; Funnel &rarr;
+                    </button>
                   </div>
                 </div>
 
@@ -817,60 +828,93 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <h3 className="text-sm font-bold text-slate-900">
-                          Interactive Sales Performance & Conversion Trend
+                          Recent 7-Day Order &amp; Revenue Settlement (Real Database Ledger)
                         </h3>
                         <p className="text-xs text-slate-500">
-                          Doha & Lusail daily settlement velocity (QAR)
+                          Actual daily revenue and order volume from completed orders
                         </p>
                       </div>
-                      <div className="flex items-center bg-slate-100 p-1 rounded-lg text-xs">
-                        {(
-                          [
-                            { id: 'revenue', label: 'Revenue (QAR)' },
-                            { id: 'orders', label: 'Order Volume' },
-                            { id: 'conversion', label: 'Conversion %' },
-                          ] as const
-                        ).map((m) => (
-                          <button
-                            key={m.id}
-                            onClick={() => setChartMetric(m.id)}
-                            className={`px-2.5 py-1 rounded-md font-semibold ${
-                              chartMetric === m.id ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
-                            }`}
-                          >
-                            {m.label}
-                          </button>
-                        ))}
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center bg-slate-100 p-1 rounded-lg text-xs">
+                          {(
+                            [
+                              { id: 'revenue', label: 'Revenue (QAR)' },
+                              { id: 'orders', label: 'Order Volume' },
+                            ] as const
+                          ).map((m) => (
+                            <button
+                              key={m.id}
+                              onClick={() => setChartMetric(m.id)}
+                              className={`px-2.5 py-1 rounded-md font-semibold ${
+                                chartMetric === m.id ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
+                              }`}
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setActiveTab('analytics')}
+                          className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800"
+                        >
+                          Full Analytics &amp; Live Map &rarr;
+                        </button>
                       </div>
                     </div>
 
-                    {/* Visual Bar Chart */}
-                    <div className="h-52 pt-6 flex items-end gap-3 border-b border-slate-200 pb-2">
-                      {[
-                        { day: 'Mon', rev: 4200, ord: 4, conv: 3.4, pct: 52 },
-                        { day: 'Tue', rev: 5800, ord: 6, conv: 3.8, pct: 68 },
-                        { day: 'Wed', rev: 4900, ord: 5, conv: 3.6, pct: 58 },
-                        { day: 'Thu', rev: 8400, ord: 9, conv: 4.7, pct: 95 },
-                        { day: 'Fri', rev: 7600, ord: 8, conv: 4.4, pct: 86 },
-                        { day: 'Sat', rev: 8900, ord: 10, conv: 4.9, pct: 100 },
-                        { day: 'Sun', rev: 6500, ord: 7, conv: 4.1, pct: 74 },
-                      ].map((bar) => (
-                        <div key={bar.day} className="flex-1 flex flex-col items-center gap-2 group">
-                          <div className="text-[10px] font-mono font-bold text-slate-700 tabular-nums">
-                            {chartMetric === 'revenue' && `${bar.rev} QAR`}
-                            {chartMetric === 'orders' && `${bar.ord} ord`}
-                            {chartMetric === 'conversion' && `${bar.conv}%`}
-                          </div>
-                          <div className="w-full bg-slate-100 rounded-t-lg h-36 flex items-end overflow-hidden">
-                            <div
-                              className="w-full bg-slate-900 group-hover:bg-emerald-600 transition-all rounded-t-lg"
-                              style={{ height: `${bar.pct}%` }}
-                            />
-                          </div>
-                          <span className="text-xs font-semibold text-slate-500">{bar.day}</span>
+                    {/* Visual Bar Chart computed from real completedOrders */}
+                    {(() => {
+                      const days = Array.from({ length: 7 }, (_, idx) => {
+                        const d = new Date();
+                        d.setDate(d.getDate() - (6 - idx));
+                        const dateKey = d.toISOString().split('T')[0];
+                        const label = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+                        const matching = completedOrders.filter(
+                          (o) => o.orderDate.split('T')[0] === dateKey
+                        );
+                        const rev = matching.reduce(
+                          (acc, o) => acc + o.financials.totalAmountMinorUnits / 100,
+                          0
+                        );
+                        return {
+                          dateKey,
+                          label,
+                          rev,
+                          ord: matching.length,
+                        };
+                      });
+                      const maxRev = Math.max(100, ...days.map((d) => d.rev));
+                      const maxOrd = Math.max(1, ...days.map((d) => d.ord));
+
+                      return (
+                        <div className="h-52 pt-6 flex items-end gap-3 border-b border-slate-200 pb-2">
+                          {days.map((bar) => {
+                            const pct =
+                              chartMetric === 'orders'
+                                ? Math.round((bar.ord / maxOrd) * 100)
+                                : Math.round((bar.rev / maxRev) * 100);
+                            return (
+                              <div key={bar.dateKey} className="flex-1 flex flex-col items-center gap-2 group">
+                                <div className="text-[10px] font-mono font-bold text-slate-700 tabular-nums">
+                                  {chartMetric === 'orders'
+                                    ? `${bar.ord} ord`
+                                    : `${bar.rev.toFixed(0)} QAR`}
+                                </div>
+                                <div className="w-full bg-slate-100 rounded-t-lg h-36 flex items-end overflow-hidden">
+                                  <div
+                                    className="w-full bg-slate-900 group-hover:bg-emerald-600 transition-all rounded-t-lg"
+                                    style={{ height: `${Math.max(4, pct)}%` }}
+                                  />
+                                </div>
+                                <span className="text-[11px] font-semibold text-slate-500 text-center">
+                                  {bar.label}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Low-Stock Alerts Widget */}
@@ -970,7 +1014,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                     <div className="divide-y divide-slate-100">
                       {orders.slice(0, 5).map((o) => (
-                        <div key={o.orderId} className="py-3 flex items-center justify-between text-xs">
+                        <div key={o.orderId} className="py-3 flex items-center justify-between text-xs gap-3">
                           <div>
                             <div className="font-bold text-slate-900 font-mono">
                               {o.orderNumber}{' '}
@@ -983,13 +1027,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               {new Date(o.orderDate).toLocaleDateString()}
                             </div>
                           </div>
-                          <div className="text-right">
-                            <div className="font-mono font-bold text-slate-900 tabular-nums">
-                              {(o.financials.totalAmountMinorUnits / 100).toFixed(2)} QAR
+                          <div className="flex items-center gap-2.5">
+                            <div className="text-right">
+                              <div className="font-mono font-bold text-slate-900 tabular-nums">
+                                {(o.financials.totalAmountMinorUnits / 100).toFixed(2)} QAR
+                              </div>
+                              <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold uppercase">
+                                {o.isDraft ? 'DRAFT' : o.status}
+                              </span>
                             </div>
-                            <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold uppercase">
-                              {o.isDraft ? 'DRAFT' : o.status}
-                            </span>
+                            <button
+                              onClick={() => {
+                                storeDb.deleteOrder(o.orderId, true);
+                                handleFullRefresh();
+                                notify(`Deleted order ${o.orderNumber}.`);
+                              }}
+                              title={`Delete order ${o.orderNumber}`}
+                              className="p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
                       ))}

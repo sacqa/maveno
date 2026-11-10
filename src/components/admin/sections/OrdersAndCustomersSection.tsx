@@ -100,6 +100,11 @@ export const OrdersAndCustomersSection: React.FC<OrdersAndCustomersProps> = ({
   const [restockOnRefund, setRestockOnRefund] = useState(true);
   const [timelineComment, setTimelineComment] = useState('');
   const [orderNoteEdit, setOrderNoteEdit] = useState('');
+  const [deletingOrdersConfirm, setDeletingOrdersConfirm] = useState<{
+    orderIds: string[];
+    label: string;
+  } | null>(null);
+  const [restockOnDelete, setRestockOnDelete] = useState(true);
 
   // --- Customers State ---
   const [customerSegmentFilter, setCustomerSegmentFilter] = useState<string>('all');
@@ -204,8 +209,18 @@ export const OrdersAndCustomersSection: React.FC<OrdersAndCustomersProps> = ({
     );
   };
 
-  const handleBulkOrderAction = (action: 'fulfill' | 'mark_paid' | 'cancel' | 'export') => {
+  const handleBulkOrderAction = (action: 'fulfill' | 'mark_paid' | 'cancel' | 'export' | 'delete') => {
     if (selectedOrderIds.length === 0) return;
+    if (action === 'delete') {
+      setDeletingOrdersConfirm({
+        orderIds: [...selectedOrderIds],
+        label:
+          selectedOrderIds.length === 1
+            ? orders.find((o) => o.orderId === selectedOrderIds[0])?.orderNumber || '1 selected order'
+            : `${selectedOrderIds.length} selected orders`,
+      });
+      return;
+    }
     if (action === 'export') {
       const selected = orders.filter((o) => selectedOrderIds.includes(o.orderId));
       const csvRows = [
@@ -253,6 +268,23 @@ export const OrdersAndCustomersSection: React.FC<OrdersAndCustomersProps> = ({
     onRefresh();
     setSelectedOrderIds([]);
     notify(`Bulk action (${action}) applied to ${selectedOrderIds.length} orders.`);
+  };
+
+  const handleConfirmDeleteOrders = () => {
+    if (!deletingOrdersConfirm) return;
+    const { orderIds, label } = deletingOrdersConfirm;
+    const deletedCount = storeDb.deleteOrdersBulk(orderIds, restockOnDelete);
+    if (inspectingOrder && orderIds.includes(inspectingOrder.orderId)) {
+      setInspectingOrder(null);
+    }
+    setSelectedOrderIds((prev) => prev.filter((id) => !orderIds.includes(id)));
+    setDeletingOrdersConfirm(null);
+    onRefresh();
+    notify(
+      `Deleted ${deletedCount === 1 ? `order ${label}` : `${deletedCount} orders`}${
+        restockOnDelete ? ' (inventory restocked).' : '.'
+      }`
+    );
   };
 
   const handleCreateCustomOrDraftOrder = (e: React.FormEvent) => {
@@ -976,13 +1008,27 @@ export const OrdersAndCustomersSection: React.FC<OrdersAndCustomersProps> = ({
                                 {ord.items.map((i) => `${i.quantity}x ${i.productName}`).join(', ')}
                               </div>
                             </div>
-                            <div className="text-right">
-                              <div className="font-mono font-bold text-slate-900">
-                                {(ord.financials.totalAmountMinorUnits / 100).toFixed(2)} QAR
+                            <div className="flex items-center gap-3">
+                              <div className="text-right">
+                                <div className="font-mono font-bold text-slate-900">
+                                  {(ord.financials.totalAmountMinorUnits / 100).toFixed(2)} QAR
+                                </div>
+                                <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase">
+                                  {ord.status}
+                                </span>
                               </div>
-                              <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase">
-                                {ord.status}
-                              </span>
+                              <button
+                                onClick={() =>
+                                  setDeletingOrdersConfirm({
+                                    orderIds: [ord.orderId],
+                                    label: ord.orderNumber,
+                                  })
+                                }
+                                title="Delete Order"
+                                className="p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -1222,9 +1268,15 @@ export const OrdersAndCustomersSection: React.FC<OrdersAndCustomersProps> = ({
                 </button>
                 <button
                   onClick={() => handleBulkOrderAction('cancel')}
-                  className="px-2.5 py-1 rounded bg-white text-rose-600 text-[11px] font-semibold shadow-2xs hover:bg-slate-50"
+                  className="px-2.5 py-1 rounded bg-white text-amber-700 text-[11px] font-semibold shadow-2xs hover:bg-slate-50"
                 >
                   Cancel
+                </button>
+                <button
+                  onClick={() => handleBulkOrderAction('delete')}
+                  className="px-2.5 py-1 rounded bg-rose-600 text-white text-[11px] font-semibold shadow-2xs hover:bg-rose-700 flex items-center gap-1"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete
                 </button>
               </div>
             )}
@@ -1390,6 +1442,19 @@ export const OrdersAndCustomersSection: React.FC<OrdersAndCustomersProps> = ({
                       >
                         <Eye className="w-3.5 h-3.5" /> Manage
                       </button>
+                      <button
+                        onClick={() =>
+                          setDeletingOrdersConfirm({
+                            orderIds: [order.orderId],
+                            label: order.orderNumber,
+                          })
+                        }
+                        title={`Delete Order ${order.orderNumber}`}
+                        aria-label={`Delete Order ${order.orderNumber}`}
+                        className="p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -1429,6 +1494,17 @@ export const OrdersAndCustomersSection: React.FC<OrdersAndCustomersProps> = ({
                   className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
                 >
                   <Printer className="w-3.5 h-3.5" /> Print Invoice / Slip
+                </button>
+                <button
+                  onClick={() =>
+                    setDeletingOrdersConfirm({
+                      orderIds: [inspectingOrder.orderId],
+                      label: inspectingOrder.orderNumber,
+                    })
+                  }
+                  className="px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-xs font-semibold text-rose-700 hover:bg-rose-100 flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete Order
                 </button>
                 <button
                   onClick={() => setInspectingOrder(null)}
@@ -2040,6 +2116,66 @@ export const OrdersAndCustomersSection: React.FC<OrdersAndCustomersProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Order(s) Confirmation Modal */}
+      {deletingOrdersConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Delete {deletingOrdersConfirm.orderIds.length === 1 ? 'Order' : 'Orders'}?
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Target: <strong className="font-mono text-slate-800">{deletingOrdersConfirm.label}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDeletingOrdersConfirm(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              This will permanently remove the selected order record(s) from the Orders &amp; Fulfillment Ledger and customer order history. This action cannot be undone.
+            </p>
+
+            <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 font-medium cursor-pointer">
+              <input
+                type="checkbox"
+                checked={restockOnDelete}
+                onChange={(e) => setRestockOnDelete(e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              <span>Restock unrefunded item quantities back to Doha Pearl Hub inventory</span>
+            </label>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingOrdersConfirm(null)}
+                className="px-4 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteOrders}
+                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Confirm Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

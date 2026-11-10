@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, UserCheck, Package, ShieldCheck, MapPin, Truck, ExternalLink } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, UserCheck, Package, ShieldCheck, Truck, ExternalLink, Trash2 } from 'lucide-react';
 import { ImmutableOrderSnapshot, StoreSettings, UserRole } from '../../types/ecommerce';
 import { storeDb } from '../../services/store-db';
 
@@ -11,6 +11,7 @@ interface CustomerDashboardModalProps {
   currentRole: UserRole;
   onRoleChanged: (role: UserRole) => void;
   onViewOrder: (order: ImmutableOrderSnapshot) => void;
+  onOrdersUpdated?: () => void;
 }
 
 export const CustomerDashboardModal: React.FC<CustomerDashboardModalProps> = ({
@@ -21,7 +22,10 @@ export const CustomerDashboardModal: React.FC<CustomerDashboardModalProps> = ({
   currentRole,
   onRoleChanged,
   onViewOrder,
+  onOrdersUpdated,
 }) => {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   if (!isOpen) return null;
 
   return (
@@ -129,16 +133,48 @@ export const CustomerDashboardModal: React.FC<CustomerDashboardModalProps> = ({
                       )}
                     </div>
 
-                    <button
-                      onClick={() => {
-                        onClose();
-                        onViewOrder(ord);
-                      }}
-                      className="px-3 py-1.5 bg-white border border-neutral-300 rounded-lg text-xs font-semibold text-neutral-800 hover:bg-neutral-100 flex items-center gap-1.5 shrink-0 self-start sm:self-auto cursor-pointer"
-                    >
-                      <span>View Receipt</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                      <button
+                        onClick={() => {
+                          onClose();
+                          onViewOrder(ord);
+                        }}
+                        className="px-3 py-1.5 bg-white border border-neutral-300 rounded-lg text-xs font-semibold text-neutral-800 hover:bg-neutral-100 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span>View Receipt</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+
+                      {confirmDeleteId === ord.orderId ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              storeDb.deleteOrder(ord.orderId, true);
+                              setConfirmDeleteId(null);
+                              onOrdersUpdated?.();
+                            }}
+                            className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                          >
+                            Confirm Delete
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="px-2 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-xs font-semibold cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteId(ord.orderId)}
+                          title={`Delete order ${ord.orderNumber}`}
+                          aria-label={`Delete order ${ord.orderNumber}`}
+                          className="p-1.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

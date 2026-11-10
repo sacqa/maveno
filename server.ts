@@ -496,6 +496,276 @@ ${urls
     });
   });
 
+  // ============================================================================
+  // 5c. Real-Time Storefront Analytics & Live View Engine (SSE + Authoritative State)
+  // ============================================================================
+  interface ServerVisitorSession {
+    sessionId: string;
+    visitorId: string;
+    deviceType: 'desktop' | 'mobile' | 'tablet';
+    trafficSource: 'Direct' | 'Organic Search' | 'Social' | 'Referral' | 'Campaign';
+    countryCode: string;
+    countryName: string;
+    city: string;
+    lat: number;
+    lng: number;
+    currentPage: string;
+    cartItemCount: number;
+    cartValueMinorUnits: number;
+    inCheckout: boolean;
+    viewedProductIds: string[];
+    addedToCart: boolean;
+    reachedCheckout: boolean;
+    completedPurchase: boolean;
+    startedAt: string;
+    lastSeenAt: string;
+    isOnline: boolean;
+  }
+
+  interface ServerAnalyticsEvent {
+    eventId: string;
+    type:
+      | 'session_start'
+      | 'page_view'
+      | 'product_view'
+      | 'add_to_cart'
+      | 'cart_updated'
+      | 'checkout_started'
+      | 'purchase_completed'
+      | 'heartbeat'
+      | 'session_leave';
+    sessionId: string;
+    visitorId: string;
+    timestamp: string;
+    countryCode: string;
+    countryName: string;
+    city: string;
+    lat: number;
+    lng: number;
+    deviceType: 'desktop' | 'mobile' | 'tablet';
+    trafficSource: 'Direct' | 'Organic Search' | 'Social' | 'Referral' | 'Campaign';
+    pagePath?: string;
+    productId?: string;
+    productName?: string;
+    variantTitle?: string;
+    quantity?: number;
+    amountMinorUnits?: number;
+    orderId?: string;
+    orderNumber?: string;
+  }
+
+  const visitorSessions = new Map<string, ServerVisitorSession>();
+  const analyticsEvents: ServerAnalyticsEvent[] = [];
+  const processedEventIds = new Set<string>();
+  const sseClients = new Set<express.Response>();
+
+  const ACTIVE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes active window
+
+  function buildLiveAnalyticsSnapshot() {
+    const now = Date.now();
+    const allSessions: ServerVisitorSession[] = [];
+    let activeVisitorsRightNow = 0;
+    let activeCartsRightNow = 0;
+    let checkingOutRightNow = 0;
+    let purchasedInActiveSessions = 0;
+
+    visitorSessions.forEach((sess) => {
+      const ageMs = now - new Date(sess.lastSeenAt).getTime();
+      const currentlyActive = sess.isOnline && ageMs <= ACTIVE_WINDOW_MS;
+      const enriched: ServerVisitorSession = {
+        ...sess,
+        isOnline: currentlyActive,
+      };
+      allSessions.push(enriched);
+      if (currentlyActive) {
+        activeVisitorsRightNow += 1;
+        if (sess.cartItemCount > 0) {
+          activeCartsRightNow += 1;
+        }
+        if (sess.inCheckout) {
+          checkingOutRightNow += 1;
+        }
+        if (sess.completedPurchase) {
+          purchasedInActiveSessions += 1;
+        }
+      }
+    });
+
+    return {
+      timestamp: new Date().toISOString(),
+      liveCounters: {
+        activeVisitorsRightNow,
+        activeCartsRightNow,
+        checkingOutRightNow,
+        purchasedRightNow: purchasedInActiveSessions,
+      },
+      sessions: allSessions.sort(
+        (a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
+      ),
+      recentEvents: analyticsEvents.slice(0, 120),
+    };
+  }
+
+  function broadcastLiveAnalytics() {
+    if (sseClients.size === 0) return;
+    const payload = `data: ${JSON.stringify(buildLiveAnalyticsSnapshot())}\n\n`;
+    sseClients.forEach((clientRes) => {
+      try {
+        clientRes.write(payload);
+      } catch {
+        sseClients.delete(clientRes);
+      }
+    });
+  }
+
+  app.post('/api/analytics/track', (req, res) => {
+    const body = req.body || {};
+    const sessionId = String(body.sessionId || '').trim();
+    const visitorId = String(body.visitorId || '').trim();
+    if (!sessionId || !visitorId) {
+      return res.status(400).json({ error: 'Missing sessionId or visitorId' });
+    }
+
+    const eventId = String(body.eventId || `${sessionId}_${Date.now()}_${Math.random()}`);
+    if (processedEventIds.has(eventId)) {
+      return res.json({ ok: true, duplicate: true, snapshot: buildLiveAnalyticsSnapshot() });
+    }
+    processedEventIds.add(eventId);
+
+    const nowIso = new Date().toISOString();
+    const type: ServerAnalyticsEvent['type'] = body.type || 'page_view';
+    const deviceType: ServerVisitorSession['deviceType'] =
+      body.deviceType === 'mobile' || body.deviceType === 'tablet' ? body.deviceType : 'desktop';
+    const trafficSource: ServerVisitorSession['trafficSource'] =
+      body.trafficSource === 'Organic Search' ||
+      body.trafficSource === 'Social' ||
+      body.trafficSource === 'Referral' ||
+      body.trafficSource === 'Campaign'
+        ? body.trafficSource
+        : 'Direct';
+
+    const countryCode = String(body.countryCode || 'QA').toUpperCase();
+    const countryName = String(body.countryName || 'Qatar');
+    const city = String(body.city || 'Doha');
+    const lat = Number.isFinite(Number(body.lat)) ? Number(body.lat) : 25.2854;
+    const lng = Number.isFinite(Number(body.lng)) ? Number(body.lng) : 51.531;
+
+    const existing = visitorSessions.get(sessionId);
+    const viewedSet = new Set<string>(existing?.viewedProductIds || []);
+    if (body.productId) {
+      viewedSet.add(String(body.productId));
+    }
+
+    const cartItemCount =
+      typeof body.cartItemCount === 'number'
+        ? Math.max(0, body.cartItemCount)
+        : existing?.cartItemCount || 0;
+    const cartValueMinorUnits =
+      typeof body.cartValueMinorUnits === 'number'
+        ? Math.max(0, body.cartValueMinorUnits)
+        : existing?.cartValueMinorUnits || 0;
+    const inCheckout =
+      typeof body.inCheckout === 'boolean'
+        ? body.inCheckout
+        : type === 'checkout_started'
+        ? true
+        : type === 'purchase_completed'
+        ? false
+        : existing?.inCheckout || false;
+
+    const updatedSession: ServerVisitorSession = {
+      sessionId,
+      visitorId,
+      deviceType,
+      trafficSource: existing?.trafficSource || trafficSource,
+      countryCode,
+      countryName,
+      city,
+      lat,
+      lng,
+      currentPage: String(body.pagePath || existing?.currentPage || '/'),
+      cartItemCount,
+      cartValueMinorUnits,
+      inCheckout,
+      viewedProductIds: Array.from(viewedSet),
+      addedToCart:
+        Boolean(existing?.addedToCart) || type === 'add_to_cart' || cartItemCount > 0,
+      reachedCheckout:
+        Boolean(existing?.reachedCheckout) || type === 'checkout_started' || inCheckout,
+      completedPurchase:
+        Boolean(existing?.completedPurchase) || type === 'purchase_completed',
+      startedAt: existing?.startedAt || nowIso,
+      lastSeenAt: nowIso,
+      isOnline: type !== 'session_leave',
+    };
+
+    visitorSessions.set(sessionId, updatedSession);
+
+    if (type !== 'heartbeat') {
+      const newEvent: ServerAnalyticsEvent = {
+        eventId,
+        type,
+        sessionId,
+        visitorId,
+        timestamp: nowIso,
+        countryCode,
+        countryName,
+        city,
+        lat,
+        lng,
+        deviceType,
+        trafficSource: updatedSession.trafficSource,
+        pagePath: body.pagePath,
+        productId: body.productId,
+        productName: body.productName,
+        variantTitle: body.variantTitle,
+        quantity: body.quantity,
+        amountMinorUnits: body.amountMinorUnits,
+        orderId: body.orderId,
+        orderNumber: body.orderNumber,
+      };
+      analyticsEvents.unshift(newEvent);
+      if (analyticsEvents.length > 500) {
+        analyticsEvents.length = 500;
+      }
+    }
+
+    broadcastLiveAnalytics();
+    return res.json({
+      ok: true,
+      snapshot: buildLiveAnalyticsSnapshot(),
+    });
+  });
+
+  app.get('/api/analytics/state', (req, res) => {
+    res.json(buildLiveAnalyticsSnapshot());
+  });
+
+  app.get('/api/analytics/live-stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    // Send initial authoritative state immediately
+    res.write(`data: ${JSON.stringify(buildLiveAnalyticsSnapshot())}\n\n`);
+    sseClients.add(res);
+
+    const keepAliveTimer = setInterval(() => {
+      try {
+        res.write(`data: ${JSON.stringify(buildLiveAnalyticsSnapshot())}\n\n`);
+      } catch {
+        clearInterval(keepAliveTimer);
+        sseClients.delete(res);
+      }
+    }, 10000);
+
+    req.on('close', () => {
+      clearInterval(keepAliveTimer);
+      sseClients.delete(res);
+    });
+  });
+
   // Catch-all for any unknown /api/* route
   app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API endpoint ${req.originalUrl} not found.` });

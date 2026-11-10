@@ -4,18 +4,29 @@
 
 @layer base {
   :root {
-    --brand-primary: #171717;
-    --brand-secondary: #525252;
-    --brand-accent: #b45309; /* warm amber luxury accent */
-    --brand-accent-hover: #92400e;
-    --brand-bg: #fafafa;
+    --brand-primary: #113225;
+    --brand-secondary: #3f594d;
+    --brand-accent: #c59b5f; /* antique brass accent */
+    --brand-accent-hover: #a88047;
+    --brand-bg: #fdfcf9;
     --brand-surface: #ffffff;
-    --brand-border: #e5e5e5;
+    --brand-border: #cfe0d6;
     --brand-text: #171717;
-    --brand-muted: #737373;
+    --brand-muted: #5f6f66;
     --font-heading: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-sans: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'Poppins', monospace;
+
+    /* Emerald Botanical & Ivory Palette (Option 2 — Permanent) */
+    --hp-primary: #113225;
+    --hp-primary-hover: #0B2219;
+    --hp-band-bg: #F1F6F3;
+    --hp-card-tint: #E5EFE9;
+    --hp-border: #CFE0D6;
+    --hp-hero-from: #DCECE2;
+    --hp-hero-via: #EAF4EE;
+    --hp-hero-to: #D2E6DA;
+    --hp-story-card: #D0E6D9;
   }
 
   *,
@@ -49,9 +60,9 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d4d4d4;
+  background: #c3d4ca;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #a3a3a3;
+  background: #96b0a1;
 }

@@ -78,6 +78,7 @@ const STORAGE_KEYS = {
   STAFF: 'aura_db_staff',
   NOTIFICATIONS: 'aura_db_notifications',
   CART: 'aura_qatar_shopping_cart_v1',
+  RECENTLY_VIEWED: 'maveno_recently_viewed_products_v1',
 };
 
 class StoreDatabase {
@@ -113,8 +114,19 @@ class StoreDatabase {
     try {
       const storedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       this.settings = storedSettings ? { ...INITIAL_SETTINGS, ...JSON.parse(storedSettings) } : { ...INITIAL_SETTINGS };
-      if (!storedSettings || this.settings.storeName === 'AURA INTERNATIONAL' || this.settings.baseCurrencyCode === 'USD') {
-        this.settings = { ...INITIAL_SETTINGS };
+      if (
+        !storedSettings ||
+        this.settings.storeName === 'AURA INTERNATIONAL' ||
+        this.settings.storeName === 'AURA QATAR' ||
+        this.settings.baseCurrencyCode === 'USD'
+      ) {
+        const preservedLimit = this.settings.homepageProductLimit || INITIAL_SETTINGS.homepageProductLimit;
+        const preservedShopPerPage = this.settings.shopProductsPerPage || INITIAL_SETTINGS.shopProductsPerPage;
+        this.settings = {
+          ...INITIAL_SETTINGS,
+          homepageProductLimit: preservedLimit,
+          shopProductsPerPage: preservedShopPerPage,
+        };
       }
       this.settings.headingFont = "'Poppins', sans-serif";
       if (!this.settings.homepageProductLimit || this.settings.homepageProductLimit < 1) {
@@ -948,6 +960,84 @@ class StoreDatabase {
     return { ...order };
   }
 
+  public deleteOrder(orderId: string, restockItems = false): boolean {
+    const order = this.orders.find((o) => o.orderId === orderId || o.orderNumber === orderId);
+    if (!order) return false;
+
+    if (restockItems && !order.isDraft && order.status !== 'refunded') {
+      order.items.forEach((item) => {
+        const prod = this.products.find((p) => p.id === item.productId);
+        const variant = prod?.variants.find((v) => v.id === item.variantId) || prod?.variants[0];
+        if (prod && variant) {
+          variant.stockQuantity += item.quantity;
+          this.stockHistory.unshift({
+            id: 'sh_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            productId: prod.id,
+            variantId: variant.id,
+            productName: prod.name,
+            sku: variant.sku,
+            locationId: 'loc_doha_pearl',
+            locationName: 'Doha Pearl Flagship Fulfillment Hub',
+            delta: item.quantity,
+            newAvailable: variant.stockQuantity,
+            reason: 'return_restock',
+            adjustedBy: `Deleted Order ${order.orderNumber}`,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      });
+    }
+
+    const beforeLen = this.orders.length;
+    this.orders = this.orders.filter(
+      (o) => o.orderId !== order.orderId && o.orderNumber !== order.orderNumber
+    );
+    this.saveAll();
+    return this.orders.length !== beforeLen;
+  }
+
+  public deleteOrdersBulk(orderIds: string[], restockItems = false): number {
+    let deletedCount = 0;
+    const idSet = new Set(orderIds);
+    orderIds.forEach((id) => {
+      const order = this.orders.find((o) => o.orderId === id || o.orderNumber === id);
+      if (order) {
+        if (restockItems && !order.isDraft && order.status !== 'refunded') {
+          order.items.forEach((item) => {
+            const prod = this.products.find((p) => p.id === item.productId);
+            const variant = prod?.variants.find((v) => v.id === item.variantId) || prod?.variants[0];
+            if (prod && variant) {
+              variant.stockQuantity += item.quantity;
+              this.stockHistory.unshift({
+                id: 'sh_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                productId: prod.id,
+                variantId: variant.id,
+                productName: prod.name,
+                sku: variant.sku,
+                locationId: 'loc_doha_pearl',
+                locationName: 'Doha Pearl Flagship Fulfillment Hub',
+                delta: item.quantity,
+                newAvailable: variant.stockQuantity,
+                reason: 'return_restock',
+                adjustedBy: `Bulk Deleted Order ${order.orderNumber}`,
+                timestamp: new Date().toISOString(),
+              });
+            }
+          });
+        }
+        deletedCount += 1;
+      }
+    });
+
+    if (deletedCount > 0) {
+      this.orders = this.orders.filter(
+        (o) => !idSet.has(o.orderId) && !idSet.has(o.orderNumber)
+      );
+      this.saveAll();
+    }
+    return deletedCount;
+  }
+
   // --- Customers ---
   public getCustomers(): CustomerRecord[] {
     return [...this.customers];
@@ -1454,6 +1544,114 @@ class StoreDatabase {
     } catch {
       // ignore
     }
+  }
+
+  // --- Newsletter Subscription (Connected to Customer & Marketing Database) ---
+  public subscribeToNewsletter(
+    rawEmail: string,
+    consentGranted = true
+  ): {
+    success: boolean;
+    alreadySubscribed?: boolean;
+    message: string;
+  } {
+    const email = (rawEmail || '').trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return {
+        success: false,
+        message: 'Please enter a valid email address (e.g. name@domain.qa).',
+      };
+    }
+    if (!consentGranted) {
+      return {
+        success: false,
+        message: 'Please confirm privacy and adult-communication consent to subscribe.',
+      };
+    }
+
+    const existingCustomer = this.customers.find(
+      (c) => c.email.trim().toLowerCase() === email
+    );
+
+    if (existingCustomer) {
+      const wasSubscribed = Boolean(existingCustomer.marketingSubscribed);
+      existingCustomer.marketingSubscribed = true;
+      if (!existingCustomer.tags.includes('Maveno-Newsletter')) {
+        existingCustomer.tags.push('Maveno-Newsletter');
+      }
+      this.saveAll();
+      return {
+        success: true,
+        alreadySubscribed: wasSubscribed,
+        message: wasSubscribed
+          ? `${email} is already subscribed to Maveno dispatches. Preferences confirmed.`
+          : `Welcome back — ${email} is now subscribed to Maveno private releases and editorial updates.`,
+      };
+    }
+
+    const localNamePart = email.split('@')[0].replace(/[._-]+/g, ' ');
+    const formattedName = localNamePart
+      .split(' ')
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+
+    const newSubscriber: CustomerRecord = {
+      id: `cust_news_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      fullName: formattedName || 'Maveno Subscriber',
+      email,
+      phone: '+974 5500 0000',
+      createdAt: new Date().toISOString().split('T')[0],
+      marketingSubscribed: true,
+      smsMarketingSubscribed: false,
+      segment: 'First-Time',
+      tags: ['Maveno-Newsletter', 'Editorial-Dispatch'],
+      notes: `Subscribed via Maveno Homepage Newsletter on ${new Date().toISOString().split('T')[0]}.`,
+      verifiedAge: 25,
+      addresses: [],
+    };
+
+    this.customers.unshift(newSubscriber);
+    this.saveAll();
+
+    return {
+      success: true,
+      alreadySubscribed: false,
+      message: `Thank you for subscribing. ${email} has been added to the Maveno editorial & release list.`,
+    };
+  }
+
+  // --- Recently Viewed Products (Real Session / LocalStorage History) ---
+  public getRecentlyViewedProductIds(): string[] {
+    const defaultSeeds = [
+      'prod_architek_titan_mod',
+      'prod_botanica_oakwood_eliquid',
+      'prod_aeterna_rta_tank',
+      'prod_monolith_boro_box',
+    ];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.RECENTLY_VIEWED);
+      if (!raw) return defaultSeeds;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+      return defaultSeeds;
+    } catch {
+      return defaultSeeds;
+    }
+  }
+
+  public recordRecentlyViewedProduct(productId: string): string[] {
+    const current = this.getRecentlyViewedProductIds();
+    const updated = [productId, ...current.filter((id) => id !== productId)].slice(0, 8);
+    try {
+      localStorage.setItem(STORAGE_KEYS.RECENTLY_VIEWED, JSON.stringify(updated));
+    } catch {
+      // ignore storage errors
+    }
+    return updated;
   }
 }
 

@@ -1,111 +1,227 @@
 import React from 'react';
-import { ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { Country, Currency, StoreSettings } from '../../types/ecommerce';
+import { ArrowUpRight } from 'lucide-react';
+import { motion, Variants } from 'motion/react';
+import { Country, Currency, Product, StoreSettings } from '../../types/ecommerce';
+import { formatMinorUnits, resolveProductPrice } from '../../utils/commerce-engine';
+
+const heroContainerVariants: Variants = {
+  hidden: { opacity: 0, y: 24 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.65,
+      ease: [0.22, 1, 0.36, 1],
+      staggerChildren: 0.12,
+      delayChildren: 0.08,
+    },
+  },
+};
+
+const heroItemVariants: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.55,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+};
 
 interface HeroBannerProps {
   settings: StoreSettings;
   currentCountry: Country;
   currentCurrency: Currency;
+  featuredProduct?: Product;
   onExploreCatalog: () => void;
+  onDiscoverMaveno?: () => void;
   onOpenCompliance: () => void;
+  onInspectProduct?: (product: Product) => void;
 }
 
 export const HeroBanner: React.FC<HeroBannerProps> = ({
   settings,
   currentCountry,
   currentCurrency,
+  featuredProduct,
   onExploreCatalog,
+  onDiscoverMaveno,
   onOpenCompliance,
+  onInspectProduct,
 }) => {
+  const headlineText =
+    settings.heroHeadline &&
+    settings.heroHeadline !== 'Precision Engineering. Pure Botanical Extracts.'
+      ? settings.heroHeadline
+      : 'Designed to stand apart.';
+
+  const supportingText =
+    settings.heroDescription &&
+    !settings.heroDescription.startsWith('Curated luxury vapor platforms')
+      ? settings.heroDescription
+      : 'Discover a carefully curated collection of modern products, thoughtful design and distinctive craftsmanship.';
+
+  const primaryCtaText =
+    settings.heroPrimaryButtonText &&
+    settings.heroPrimaryButtonText !== 'Explore Catalog'
+      ? settings.heroPrimaryButtonText
+      : 'Shop Collection';
+
+  const spotlightPrice = featuredProduct
+    ? formatMinorUnits(
+        resolveProductPrice(featuredProduct, currentCountry.code, currentCurrency),
+        currentCurrency
+      )
+    : null;
+
   return (
-    <section className="relative bg-neutral-900 text-white overflow-hidden border-b border-neutral-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-20">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          {/* Left Column: Editorial Headline & Actions */}
-          <div className="lg:col-span-7 space-y-6">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-amber-400 font-semibold">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>{settings.heroBadge || 'State of Qatar Regulated Platform · 🇶🇦 Doha Hub (21+ MOPH)'}</span>
-            </div>
+    <section
+      data-testid="maveno-hero-section"
+      className="bg-[#FDFCF9] pt-4 pb-8 sm:pt-6 sm:pb-12 px-4 sm:px-6 lg:px-8"
+    >
+      <div className="max-w-7xl mx-auto">
+        {/* Soft Botanical Mint-to-Celadon Rounded-3xl Hero Card */}
+        <motion.div
+          variants={heroContainerVariants}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.15 }}
+          className="relative rounded-[28px] sm:rounded-[34px] overflow-hidden bg-linear-to-r from-[#DCECE2] via-[#EAF4EE] to-[#D2E6DA] border border-[#CFE0D6] shadow-xs"
+        >
+          {/* Subtle decorative radial highlights */}
+          <div
+            className="pointer-events-none absolute inset-0 opacity-75"
+            style={{
+              backgroundImage:
+                'radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.6), transparent 52%), radial-gradient(circle at 85% 20%, rgba(17, 50, 37, 0.08), transparent 50%)',
+            }}
+          />
 
-            <h1
-              className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-tight font-display"
-              style={{ fontFamily: "'Poppins', sans-serif", textWrap: 'balance' }}
+          <div className="relative grid grid-cols-1 lg:grid-cols-12 items-center min-h-[420px] sm:min-h-[480px] lg:min-h-[520px]">
+            {/* Left Column (6 Cols): Editorial Product & Lifestyle Composition */}
+            <motion.div
+              variants={heroItemVariants}
+              className="lg:col-span-6 relative h-full flex items-center justify-center p-6 sm:p-10 lg:p-12 order-2 lg:order-1"
             >
-              {settings.heroHeadline || 'Precision Engineering. Pure Botanical Extracts.'}
-            </h1>
+              <div className="relative w-full max-w-lg aspect-4/3 sm:aspect-16/11 rounded-2xl overflow-hidden shadow-lg border-4 border-white/85 bg-[#E5EFE9] group">
+                <img
+                  src="/src/assets/images/maveno_editorial_hero_showcase_1794341295701.jpg"
+                  alt="Maveno Curated Titanium Hardware and Amber Glass Botanical Vessels"
+                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700"
+                  referrerPolicy="no-referrer"
+                />
 
-            <p className="text-base sm:text-lg text-neutral-300 max-w-2xl leading-relaxed">
-              {settings.heroDescription || 'Curated luxury vapor platforms, high-vacuum rebuildable atomizers, and small-batch aged botanical liquids. Express warehouse fulfillment across Doha, Lusail, The Pearl, Al Rayyan, and all Qatar municipalities with mandatory Qatar National ID age verification.'}
-            </p>
+                {/* Floating Product Pill Overlay */}
+                {featuredProduct && (
+                  <div className="absolute bottom-3 left-3 right-3 sm:bottom-4 sm:left-4 sm:right-4 bg-white/95 backdrop-blur-md rounded-2xl p-3 sm:p-3.5 shadow-md border border-[#CFE0D6] flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <img
+                        src={featuredProduct.galleryImages[0]}
+                        alt={featuredProduct.name}
+                        className="w-11 h-11 rounded-xl object-cover border border-[#CFE0D6] shrink-0"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-[#113225]/75 truncate">
+                          {featuredProduct.brand} · Flagship Edition
+                        </div>
+                        <div className="text-xs sm:text-sm font-bold text-neutral-950 truncate">
+                          {featuredProduct.name}
+                        </div>
+                        {spotlightPrice && (
+                          <div className="text-xs font-mono-numbers font-semibold text-[#113225]">
+                            {spotlightPrice}
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-            {/* Jurisdiction Compliance Trust Strip */}
-            <div className="pt-2 pb-2">
-              <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-xs text-neutral-400">
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>
-                    Destination: <strong className="text-white">{currentCountry.name}</strong> ({currentCountry.code})
-                  </span>
-                </div>
-                <span className="text-neutral-600">·</span>
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>
-                    Min Legal Age: <strong className="text-white">{currentCountry.minimumAge}+</strong>
-                  </span>
-                </div>
-                <span className="text-neutral-600">·</span>
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>
-                    Billing Currency: <strong className="text-white">{currentCurrency.code}</strong>
-                  </span>
-                </div>
+                    <button
+                      type="button"
+                      data-testid="hero-spotlight-inspect-btn"
+                      onClick={() => onInspectProduct?.(featuredProduct)}
+                      className="px-3.5 py-2 rounded-full bg-[#113225] hover:bg-[#0B2219] text-white text-xs font-semibold transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+                    >
+                      <span>Inspect</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            </motion.div>
 
-            {/* Primary Action Buttons */}
-            <div className="flex flex-wrap items-center gap-4 pt-4">
-              <button
-                onClick={onExploreCatalog}
-                className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white font-medium text-sm rounded-lg transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
+            {/* Right Column (6 Cols): Centered/Right-Aligned Display Headline, Quiz Link & Emerald Pill CTA */}
+            <div className="lg:col-span-6 flex flex-col items-center lg:items-start text-center lg:text-left justify-center p-8 sm:p-12 lg:pr-16 space-y-5 order-1 lg:order-2">
+              <motion.div
+                variants={heroItemVariants}
+                className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/85 border border-[#CFE0D6] text-[11px] font-semibold text-[#113225] tracking-wide"
               >
-                <span>{settings.heroPrimaryButtonText || 'Explore Catalog'}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+                <span>{currentCountry.flagEmoji}</span>
+                <span>{currentCountry.name} Storefront</span>
+                <span aria-hidden="true">·</span>
+                <span>Verified {currentCountry.minimumAge}+ Only</span>
+              </motion.div>
 
-              <button
-                onClick={onOpenCompliance}
-                className="px-5 py-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-medium text-sm rounded-lg border border-neutral-700 transition-colors cursor-pointer"
+              <motion.h1
+                variants={heroItemVariants}
+                data-testid="hero-headline"
+                className="text-3xl sm:text-5xl lg:text-[52px] font-extrabold text-neutral-950 tracking-tight leading-[1.08]"
+                style={{ fontFamily: "'Poppins', sans-serif", textWrap: 'balance' }}
               >
-                {settings.heroSecondaryButtonText || 'Compliance & Legal Framework'}
-              </button>
+                {headlineText}
+              </motion.h1>
+
+              <motion.p
+                variants={heroItemVariants}
+                data-testid="hero-supporting-text"
+                className="text-sm sm:text-base text-neutral-700 max-w-lg leading-relaxed"
+              >
+                {supportingText}{' '}
+                <button
+                  type="button"
+                  onClick={onOpenCompliance}
+                  className="font-semibold text-neutral-950 underline underline-offset-4 hover:text-[#113225] cursor-pointer"
+                >
+                  Take the 60-second platform guide
+                </button>{' '}
+                to find your ideal hardware &amp; botanical pairing.
+              </motion.p>
+
+              <motion.div
+                variants={heroItemVariants}
+                className="pt-2 flex flex-wrap items-center justify-center lg:justify-start gap-3"
+              >
+                <button
+                  type="button"
+                  data-testid="hero-explore-collection-btn"
+                  onClick={onExploreCatalog}
+                  className="px-8 py-3.5 rounded-full bg-[#113225] hover:bg-[#0B2219] text-white font-semibold text-xs sm:text-sm tracking-wide shadow-sm transition-all cursor-pointer"
+                >
+                  {primaryCtaText}
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="hero-discover-maveno-btn"
+                  onClick={() => {
+                    if (onDiscoverMaveno) {
+                      onDiscoverMaveno();
+                    } else {
+                      document
+                        .getElementById('brand-story')
+                        ?.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  className="px-6 py-3.5 rounded-full bg-white/90 hover:bg-white text-[#113225] font-semibold text-xs sm:text-sm border border-[#113225]/20 transition-all cursor-pointer"
+                >
+                  Explore Our Story
+                </button>
+              </motion.div>
             </div>
           </div>
-
-          {/* Right Column: Hero Visual Asset */}
-          <div className="lg:col-span-5 relative">
-            <div className="relative rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl bg-neutral-950 aspect-16/10 lg:aspect-4/3">
-              <img
-                src="/src/assets/images/hero_luxury_vape_mod_1794234135797.jpg"
-                alt="Architek Titan 80W Precision Vaporizer on Travertine Stone"
-                className="w-full h-full object-cover object-center transform hover:scale-102 transition-transform duration-700"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-linear-to-t from-neutral-950/80 via-transparent to-transparent pointer-events-none" />
-              <div className="absolute bottom-4 left-4 right-4 p-4 rounded-lg bg-neutral-900/80 backdrop-blur-md border border-neutral-700/60 text-xs text-neutral-300 flex items-center justify-between">
-                <div>
-                  <div className="text-white font-semibold">Architek Titan Series</div>
-                  <div className="text-[11px] text-neutral-400">Grade 5 Monolithic Titanium · DNA60C</div>
-                </div>
-                <span className="font-mono-numbers text-amber-400 font-bold text-sm">
-                  {settings.heroFeaturedTag || `Available in ${currentCountry.code}`}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+        </motion.div>
       </div>
     </section>
   );

@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ShieldCheck,
   Search,
   ArrowRight,
-  Flame,
-  Award,
 } from 'lucide-react';
 import {
   Country,
@@ -17,10 +14,26 @@ import {
   UserRole,
 } from './types/ecommerce';
 import { storeDb } from './services/store-db';
+import { analyticsTracker } from './services/analytics-tracker';
 import { resolveProductPrice } from './utils/commerce-engine';
 import { Header } from './components/common/Header';
 import { HeroBanner } from './components/storefront/HeroBanner';
 import { ProductCard } from './components/storefront/ProductCard';
+import { motion } from 'motion/react';
+import {
+  EditorialCategoryShowcase,
+  MavenoTrustIconStrip,
+  MavenoCustomerReviews,
+  MavenoBundleBuilder,
+  MavenoHonestAnswersBlog,
+  MavenoIndulgeDarkBanner,
+  MavenoTrustedPartners,
+  MavenoBrandStory,
+  MavenoFaqSection,
+  staggerContainerVariants,
+  staggerItemVariants,
+  staggerCardVariants,
+} from './components/storefront/MavenoEditorialSections';
 import { ProductDetailModal } from './components/storefront/ProductDetailModal';
 import { ShopAllProductsPage } from './components/storefront/ShopAllProductsPage';
 import { CartDrawer } from './components/cart/CartDrawer';
@@ -129,6 +142,44 @@ export default function App() {
     cartOrderNotes,
     selectedShippingMethodId,
   ]);
+
+  // Real-time storefront analytics tracking for active visitor sessions, cart state & checkout
+  useEffect(() => {
+    const totalCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+    const totalValueMinor = cartItems.reduce((acc, item) => acc + item.totalPriceMinorUnits, 0);
+    const pagePath =
+      storefrontView === 'home'
+        ? '/'
+        : storefrontView === 'order_confirmation'
+        ? '/order-confirmation'
+        : `/${storefrontView}`;
+
+    analyticsTracker.trackEvent({
+      type: storefrontView === 'checkout' ? 'checkout_started' : 'page_view',
+      countryCode: currentCountry.code,
+      pagePath,
+      cartItemCount: totalCount,
+      cartValueMinorUnits: totalValueMinor,
+      inCheckout: storefrontView === 'checkout' || isCheckoutOpen,
+    });
+  }, [storefrontView, currentCountry.code, cartItems, isCheckoutOpen]);
+
+  // Keep active visitor heartbeat fresh while tab is open
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const totalCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+      const totalValueMinor = cartItems.reduce((acc, item) => acc + item.totalPriceMinorUnits, 0);
+      analyticsTracker.trackEvent({
+        type: 'heartbeat',
+        countryCode: currentCountry.code,
+        cartItemCount: totalCount,
+        cartValueMinorUnits: totalValueMinor,
+        inCheckout: storefrontView === 'checkout' || isCheckoutOpen,
+      });
+    }, 25000);
+
+    return () => window.clearInterval(timer);
+  }, [currentCountry.code, cartItems, storefrontView, isCheckoutOpen]);
 
   // Recalculate cart item prices if country or currency changes
   useEffect(() => {
@@ -272,6 +323,17 @@ export default function App() {
     window.scrollTo(0, 0);
   };
 
+  const handleInspectProduct = (product: Product) => {
+    storeDb.recordRecentlyViewedProduct(product.id);
+    setSelectedProduct(product);
+    analyticsTracker.trackEvent({
+      type: 'product_view',
+      countryCode: currentCountry.code,
+      productId: product.id,
+      productName: product.name,
+    });
+  };
+
   const refreshAllData = () => {
     setSettings(storeDb.getSettings());
     const refreshedCountries = storeDb.getCountries();
@@ -346,6 +408,30 @@ export default function App() {
     if (openDrawer) {
       setIsCartOpen(true);
     }
+
+    analyticsTracker.trackEvent({
+      type: 'add_to_cart',
+      countryCode: currentCountry.code,
+      productId: product.id,
+      productName: product.name,
+      variantTitle: selectedVar.title,
+      quantity,
+      amountMinorUnits: quantity * unitPriceMinorUnits,
+    });
+  };
+
+  // Bundle Add All Handler (adds all 3 bundle items to cart & opens drawer)
+  const handleAddBundleToCart = (
+    bundleEntries: Array<{ product: Product; variant: ProductVariant }>
+  ) => {
+    bundleEntries.forEach((entry, idx) => {
+      handleAddToCart(
+        entry.product,
+        entry.variant,
+        1,
+        idx === bundleEntries.length - 1
+      );
+    });
   };
 
   const handleUpdateCartQuantity = (cartItemId: string, newQty: number) => {
@@ -384,7 +470,7 @@ export default function App() {
   );
 
   // Filter and sort products
-  let filteredProducts = products.filter((p) => {
+  const filteredProducts = products.filter((p) => {
     if (p.status !== 'published') return false;
     if (selectedCategory !== 'all' && p.categoryId !== selectedCategory) return false;
     if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
@@ -424,6 +510,8 @@ export default function App() {
   const publishedCatalogCount = products.filter((p) => p.status === 'published').length;
   const homepageProductLimit = Math.max(1, Number(settings.homepageProductLimit) || 4);
   const homepageDisplayedProducts = filteredProducts.slice(0, homepageProductLimit);
+  const heroSpotlightProduct =
+    products.find((p) => p.id === 'prod_architek_titan_mod') || products[0];
 
   // If user is on the Secure Admin Login Page (/admin/login), render it exclusively
   if (adminView === 'login') {
@@ -443,8 +531,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-neutral-50 text-neutral-900">
-      {/* 1. International Header */}
+    <div className="min-h-screen flex flex-col bg-[#FDFCF9] text-neutral-900">
+      {/* 1. Top Deep Forest Marquee + Clean Ivory Responsive Header */}
       <Header
         settings={settings}
         currentCountry={currentCountry}
@@ -467,7 +555,7 @@ export default function App() {
         onOpenHome={handleOpenHomePage}
       />
 
-      {/* 2. Main Storefront Body: Shop (/shop), Cart (/cart), Checkout (/checkout), Order Confirmation (/order-confirmation), or Homepage (/) */}
+      {/* 2. Main Storefront Body: Shop (/shop), Cart (/cart), Checkout (/checkout), Order Confirmation (/order-confirmation), or Redesigned Maveno Homepage (/) */}
       {storefrontView === 'shop' ? (
         <main className="grow">
           <ShopAllProductsPage
@@ -480,7 +568,7 @@ export default function App() {
             initialCategory={selectedCategory}
             initialSearchQuery={searchQuery}
             onBackToHome={handleOpenHomePage}
-            onViewProduct={(p) => setSelectedProduct(p)}
+            onViewProduct={handleInspectProduct}
             onAddToCart={(p, variant, qty) => handleAddToCart(p, variant, qty)}
           />
         </main>
@@ -503,7 +591,7 @@ export default function App() {
             onClearCart={handleClearCart}
             onContinueShopping={() => handleOpenShopPage()}
             onProceedToCheckout={handleOpenCheckoutPage}
-            onViewProduct={(p) => setSelectedProduct(p)}
+            onViewProduct={handleInspectProduct}
           />
         </main>
       ) : storefrontView === 'checkout' ? (
@@ -527,12 +615,24 @@ export default function App() {
             onBackToCart={handleOpenCartPage}
             onBackToStorefront={handleOpenHomePage}
             onOrderCompleted={(order) => {
+              analyticsTracker.trackEvent({
+                type: 'purchase_completed',
+                countryCode: order.shippingAddress.countryCode || currentCountry.code,
+                city: order.shippingAddress.municipality || order.shippingAddress.city,
+                pagePath: '/order-confirmation',
+                cartItemCount: 0,
+                cartValueMinorUnits: 0,
+                inCheckout: false,
+                orderId: order.orderId,
+                orderNumber: order.orderNumber,
+                amountMinorUnits: order.financials.totalAmountMinorUnits,
+              });
               setCompletedOrder(order);
               handleClearCart();
               refreshAllData();
               window.history.pushState({}, '', '/order-confirmation');
               setStorefrontView('order_confirmation');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              window.scrollTo(0, 0);
             }}
           />
         </main>
@@ -549,262 +649,267 @@ export default function App() {
         </main>
       ) : (
         <main className="grow">
+          {/* SECTION 1: Soft Pink Rounded-3xl Hero Card */}
           <HeroBanner
             settings={settings}
             currentCountry={currentCountry}
             currentCurrency={currentCurrency}
+            featuredProduct={heroSpotlightProduct}
             onExploreCatalog={() => {
-              const el = document.getElementById('catalogue');
-              el?.scrollIntoView({ behavior: 'smooth' });
+              document.getElementById('catalogue')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            onDiscoverMaveno={() => {
+              document.getElementById('brand-story')?.scrollIntoView({ behavior: 'smooth' });
             }}
             onOpenCompliance={() => setIsBlogOpen(true)}
+            onInspectProduct={handleInspectProduct}
           />
 
-          {/* 3. Catalog Section with Interactive Filters */}
-          <section id="catalogue" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-            {/* Category Navigation Tabs (Interactive Segmented Control) */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-200 pb-5">
-              <div>
-                <div className="text-xs text-neutral-500 uppercase tracking-widest font-semibold">
-                  Catalogue Architecture
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-bold font-display text-neutral-900 mt-1">
-                  Precision Hardware &amp; Extracts
-                </h2>
-              </div>
+          {/* SECTION 2: "Shop by category" on Soft Blush Band */}
+          <EditorialCategoryShowcase
+            categories={allCategories}
+            products={products}
+            onSelectCategoryForShop={(catId) => handleOpenShopPage(catId)}
+            onFilterHomepageCategory={(catId) => {
+              setSelectedCategory(catId);
+              document.getElementById('catalogue')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+          />
 
-              {/* Category Segmented Tabs */}
-              <div className="flex items-center gap-1.5 p-1 bg-neutral-200/70 rounded-xl overflow-x-auto">
+          {/* SECTION 3: 4-Item Horizontal Trust Icon Strip */}
+          <MavenoTrustIconStrip currentCountry={currentCountry} />
+
+          {/* SECTION 4: Tabbed Best Selling / Featured Products Grid (Matching Screenshot's Underline Tabs + "View All" Link) */}
+          <motion.section
+            id="catalogue"
+            data-testid="maveno-featured-collection"
+            variants={staggerContainerVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.14 }}
+            className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16"
+          >
+            {/* Top Underline Tabs Row + Right "View All" Link */}
+            <motion.div
+              variants={staggerItemVariants}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#CFE0D6] pb-0"
+            >
+              <div className="flex items-center gap-6 overflow-x-auto">
                 <button
+                  type="button"
                   onClick={() => setSelectedCategory('all')}
-                  className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+                  className={`pb-3.5 text-xs sm:text-sm font-bold border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
                     selectedCategory === 'all'
-                      ? 'bg-white text-neutral-900 shadow-xs'
-                      : 'text-neutral-600 hover:text-neutral-900'
+                      ? 'border-[#113225] text-neutral-950'
+                      : 'border-transparent text-neutral-500 hover:text-neutral-900'
                   }`}
                 >
-                  All Platforms ({publishedCatalogCount})
+                  Best Selling ({publishedCatalogCount})
                 </button>
                 {allCategories.map((cat) => (
                   <button
                     key={cat.id}
+                    type="button"
                     onClick={() => setSelectedCategory(cat.id)}
-                    className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+                    className={`pb-3.5 text-xs sm:text-sm font-bold border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
                       selectedCategory === cat.id
-                        ? 'bg-white text-neutral-900 shadow-xs'
-                        : 'text-neutral-600 hover:text-neutral-900'
+                        ? 'border-[#113225] text-neutral-950'
+                        : 'border-transparent text-neutral-500 hover:text-neutral-900'
                     }`}
                   >
                     {cat.name}
                   </button>
                 ))}
               </div>
-            </div>
 
-            {/* Secondary Filter & Sort Bar */}
-            <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-neutral-600">
-              <div className="flex flex-wrap items-center gap-3">
-                <span data-testid="homepage-showing-count" className="font-semibold text-neutral-800">
-                  Showing {homepageDisplayedProducts.length} of {filteredProducts.length} active products
-                </span>
-                {searchQuery && (
-                  <span className="text-neutral-500">
-                    for query &ldquo;<strong>{searchQuery}</strong>&rdquo;
-                  </span>
-                )}
+              <div className="pb-3 sm:pb-3.5 flex items-center justify-between sm:justify-end gap-4">
                 <button
                   type="button"
                   data-testid="homepage-view-all-top-btn"
                   onClick={() => handleOpenShopPage()}
-                  className="text-xs font-bold text-[#8a1538] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                  className="text-xs sm:text-sm font-semibold text-neutral-900 hover:text-[#113225] underline underline-offset-4 cursor-pointer whitespace-nowrap"
                 >
-                  <span>View All Products ({publishedCatalogCount})</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  View All
                 </button>
               </div>
+            </motion.div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Brand Filter */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-neutral-500">Brand:</span>
-                  <select
-                    value={selectedBrand}
-                    onChange={(e) => setSelectedBrand(e.target.value)}
-                    className="bg-white border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-800 font-medium focus:outline-hidden"
-                  >
-                    <option value="all">All Brands</option>
-                    {allBrands.map((b) => (
-                      <option key={b.id} value={b.name}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Price Sort */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-neutral-500">Sort:</span>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as any)}
-                    className="bg-white border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-800 font-medium focus:outline-hidden"
-                  >
-                    <option value="featured">Featured First</option>
-                    <option value="price_asc">Price: Low to High</option>
-                    <option value="price_desc">Price: High to Low</option>
-                  </select>
-                </div>
+            {/* Subtle Secondary Filter & Count Bar */}
+            <motion.div
+              variants={staggerItemVariants}
+              className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-neutral-500"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span data-testid="homepage-showing-count" className="font-medium text-neutral-700">
+                  Showing {homepageDisplayedProducts.length} of {filteredProducts.length} active products
+                </span>
+                {searchQuery && (
+                  <span>
+                    for &ldquo;<strong>{searchQuery}</strong>&rdquo;
+                  </span>
+                )}
               </div>
-            </div>
 
-            {/* 4. Product Cards Grid (Limited by Admin Homepage Product Display Setting) */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <select
+                  value={selectedBrand}
+                  onChange={(e) => setSelectedBrand(e.target.value)}
+                  aria-label="Filter by brand"
+                  className="bg-[#F1F6F3] border border-[#CFE0D6] rounded-full px-3 py-1 text-xs text-neutral-800 font-medium focus:outline-hidden"
+                >
+                  <option value="all">All Brands</option>
+                  {allBrands.map((b) => (
+                    <option key={b.id} value={b.name}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  aria-label="Sort products"
+                  className="bg-[#F1F6F3] border border-[#CFE0D6] rounded-full px-3 py-1 text-xs text-neutral-800 font-medium focus:outline-hidden"
+                >
+                  <option value="featured">Sort: Best Selling</option>
+                  <option value="price_asc">Price: Low to High</option>
+                  <option value="price_desc">Price: High to Low</option>
+                </select>
+              </div>
+            </motion.div>
+
+            {/* 4-Column Product Grid */}
             {homepageDisplayedProducts.length === 0 ? (
-              <div className="py-20 text-center text-neutral-500 bg-white rounded-2xl border border-neutral-200 mt-4 space-y-3">
-                <Search className="w-10 h-10 text-neutral-300 mx-auto" />
+              <motion.div
+                variants={staggerItemVariants}
+                className="py-16 text-center text-neutral-500 bg-[#F1F6F3] rounded-2xl border border-[#CFE0D6] mt-2 space-y-3"
+              >
+                <Search className="w-9 h-9 text-neutral-400 mx-auto" />
                 <p className="text-sm font-medium">No products match your criteria.</p>
                 <button
+                  type="button"
                   onClick={() => {
                     setSelectedCategory('all');
                     setSelectedBrand('all');
                     setSearchQuery('');
                   }}
-                  className="px-4 py-2 bg-neutral-900 text-white rounded-lg text-xs font-semibold hover:bg-neutral-800 transition-colors cursor-pointer"
+                  className="px-5 py-2 bg-[#113225] text-white rounded-full text-xs font-semibold hover:bg-[#0B2219] transition-colors cursor-pointer"
                 >
-                  Reset All Filters
+                  Reset Filters
                 </button>
-              </div>
+              </motion.div>
             ) : (
               <>
-                <div
+                <motion.div
+                  key={`${selectedCategory}_${selectedBrand}_${sortBy}`}
+                  variants={staggerContainerVariants}
+                  initial="hidden"
+                  whileInView="visible"
+                  viewport={{ once: true, amount: 0.1 }}
                   data-testid="homepage-products-grid"
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-4"
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-2"
                 >
                   {homepageDisplayedProducts.map((product) => (
-                    <ProductCard
+                    <motion.div
                       key={product.id}
-                      product={product}
-                      currentCountry={currentCountry}
-                      currentCurrency={currentCurrency}
-                      onViewProduct={(p) => setSelectedProduct(p)}
-                      onAddToCart={(p, variant, qty) => handleAddToCart(p, variant, qty)}
-                    />
+                      variants={staggerCardVariants}
+                      whileHover={{ y: -4 }}
+                    >
+                      <ProductCard
+                        product={product}
+                        currentCountry={currentCountry}
+                        currentCurrency={currentCurrency}
+                        onViewProduct={handleInspectProduct}
+                        onAddToCart={(p, variant, qty) => handleAddToCart(p, variant, qty)}
+                      />
+                    </motion.div>
                   ))}
-                </div>
+                </motion.div>
 
-                {/* Prominent View All Products CTA Banner below Homepage Grid */}
-                <div className="mt-10 pt-8 border-t border-neutral-200 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-6 rounded-2xl border shadow-2xs">
-                  <div>
-                    <h3 className="text-base font-bold text-neutral-900">
-                      Explore the Complete {settings.storeName} Catalogue
-                    </h3>
-                    <p className="text-xs text-neutral-500 mt-0.5">
-                      Showing {homepageDisplayedProducts.length} featured items on the homepage. Browse all {publishedCatalogCount} active products with advanced filters for category, collection, price range, availability, size, and color.
-                    </p>
-                  </div>
+                {/* Bottom View All Products Pill CTA */}
+                <motion.div
+                  variants={staggerItemVariants}
+                  className="mt-10 flex justify-center"
+                >
                   <button
                     type="button"
                     data-testid="homepage-view-all-products-btn"
                     onClick={() => handleOpenShopPage()}
-                    className="px-6 py-3.5 bg-[#8a1538] hover:bg-[#72112d] text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-colors shrink-0 cursor-pointer"
+                    className="px-7 py-3 bg-[#113225] hover:bg-[#0B2219] text-white rounded-full text-xs font-bold tracking-wide inline-flex items-center gap-2 transition-colors cursor-pointer"
                   >
                     <span>View All Products ({publishedCatalogCount})</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </button>
-                </div>
+                </motion.div>
               </>
             )}
-          </section>
+          </motion.section>
 
-          {/* 5. Craftsmanship & Quality Standards Section */}
-          <section className="bg-neutral-900 text-white py-16 border-t border-b border-neutral-800">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="p-6 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
-                    <Award className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-base font-bold font-display text-white">
-                    Aerospace CNC Tolerances
-                  </h3>
-                  <p className="text-xs text-neutral-400 leading-relaxed">
-                    Every titanium and aluminum chassis is milled to microscopic +/- 0.02mm tolerances. Solid gold-plated copper connection pins ensure maximum conductivity and zero voltage sag.
-                  </p>
-                </div>
+          {/* SECTION 5: "Loved by Customers Like You" Review Carousel on Soft Sage Band */}
+          <MavenoCustomerReviews
+            products={products}
+            onViewProduct={handleInspectProduct}
+          />
 
-                <div className="p-6 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-base font-bold font-display text-white">
-                    Sovereign Legal Compliance
-                  </h3>
-                  <p className="text-xs text-neutral-400 leading-relaxed">
-                    Destination-specific rules automatically govern purchases. Minimum age thresholds (18+ in UK/EU, 21+ in USA/UAE) and TPD/FDA/ESMA declarations are enforced before any checkout proceeds.
-                  </p>
-                </div>
+          {/* SECTION 6: Interactive 3-Item Bundle Builder ("Complete Sovereign Bundle") */}
+          <MavenoBundleBuilder
+            products={products}
+            currentCountry={currentCountry}
+            currentCurrency={currentCurrency}
+            onViewProduct={handleInspectProduct}
+            onAddBundleToCart={handleAddBundleToCart}
+          />
 
-                <div className="p-6 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
-                    <Flame className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-base font-bold font-display text-white">
-                    Cold-Macerated Botanicals
-                  </h3>
-                  <p className="text-xs text-neutral-400 leading-relaxed">
-                    Naturally extracted oakwood, bergamot and heritage leaf profiles aged 90 days. Zero artificial sweeteners, zero diacetyl, bottled in UV-blocking pharmaceutical amber glass.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </section>
+          {/* SECTION 7: "Honest answers about our craft" 3-Column Blog/Guides Grid */}
+          <MavenoHonestAnswersBlog
+            posts={blogPosts}
+            onOpenBlog={() => setIsBlogOpen(true)}
+          />
 
-          {/* 6. Spotlight Showcase: Botanical Cold Extraction */}
-          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-            <div className="bg-neutral-100 rounded-3xl overflow-hidden border border-neutral-200 grid grid-cols-1 lg:grid-cols-12 items-center">
-              <div className="lg:col-span-5 aspect-4/3 lg:aspect-auto lg:h-full">
-                <img
-                  src="/src/assets/images/product_craft_eliquid_1794234137051.jpg"
-                  alt="Botanica Reserve Hand-Crafted Amber Bottle"
-                  className="w-full h-full object-cover object-center"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-              <div className="lg:col-span-7 p-8 sm:p-12 space-y-5">
-                <div className="text-xs font-semibold text-amber-800 uppercase tracking-widest">
-                  Artisanal Formulary · Somerset, England
-                </div>
-                <h2 className="text-3xl sm:text-4xl font-bold font-display text-neutral-900 leading-tight">
-                  Botanica Reserve No. 12: Charred Oak &amp; Bergamot
-                </h2>
-                <p className="text-sm text-neutral-600 leading-relaxed max-w-xl">
-                  Aged in virgin charred white oak barrels with cold-distilled Calabrian bergamot zest. Verified 100% compliant with UK MHRA and EU TPD standards. Available in 0mg aroma, 3mg and 6mg pharmaceutical strengths.
-                </p>
-                <div className="pt-2 flex items-center gap-4">
-                  <button
-                    onClick={() => {
-                      const prod = products.find((p) => p.id === 'prod_botanica_oakwood_eliquid');
-                      if (prod) setSelectedProduct(prod);
-                    }}
-                    className="px-6 py-3 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <span>Explore Reserve No. 12</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
+          {/* SECTION 8: Dark Luxury Feature Banner ("Indulge in precision.") + 4-Pill Service Strip */}
+          <MavenoIndulgeDarkBanner
+            products={products}
+            currentCountry={currentCountry}
+            currentCurrency={currentCurrency}
+            onViewProduct={handleInspectProduct}
+          />
+
+          {/* SECTION 9: "Trusted Partners / Available on" Logo Strip */}
+          <MavenoTrustedPartners />
+
+          {/* SECTION 10: "Born From A Vision, Built for Every Connoisseur" 2-Column Story */}
+          <MavenoBrandStory
+            settings={settings}
+            currentCountry={currentCountry}
+            onExploreShop={() => handleOpenShopPage()}
+            onOpenCompliance={() => setIsBlogOpen(true)}
+          />
+
+          {/* SECTION 11: "Your questions, answered" Interactive 01-04 FAQ + Emerald Concierge Card */}
+          <MavenoFaqSection
+            settings={settings}
+            currentCountry={currentCountry}
+            onOpenCompliance={() => setIsBlogOpen(true)}
+          />
         </main>
       )}
 
-      {/* 7. Compliant Footer */}
+      {/* SECTION 12: 5-Column Light Blush Footer with "Subscribe to our emails" */}
       <Footer
         settings={settings}
         currentCountry={currentCountry}
         currentCurrency={currentCurrency}
+        countries={countries}
+        currencies={currencies}
+        onSelectCountry={handleSelectCountry}
+        onSelectCurrency={setCurrentCurrency}
         onOpenBlog={() => setIsBlogOpen(true)}
         onOpenAdmin={() => void handleOpenAdminGateway()}
         onOpenAccount={() => setIsAccountOpen(true)}
+        onOpenShop={(catId) => handleOpenShopPage(catId)}
+        onOpenCart={handleOpenCartPage}
+        onOpenHome={handleOpenHomePage}
+        onSubscribed={refreshAllData}
       />
 
       {/* Product Detail Modal */}
@@ -885,6 +990,7 @@ export default function App() {
         settings={settings}
         currentRole={userRole}
         onRoleChanged={(r) => setUserRole(r)}
+        onOrdersUpdated={refreshAllData}
         onViewOrder={(order) => {
           setIsAccountOpen(false);
           setCompletedOrder(order);
