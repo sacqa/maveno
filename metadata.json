@@ -1,0 +1,8 @@
+{
+  "name": "AURA International – Premium Vapor & Hardware Platform",
+  "description": "Enterprise-grade international ecommerce platform featuring multi-currency pricing, destination-specific legal compliance, age verification, and centralized catalogue management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

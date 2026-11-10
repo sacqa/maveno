@@ -1,0 +1,82 @@
+{
+  "admin": {
+    "id": "admin_primary_01",
+    "username": "noonnashpati",
+    "email": "shahzaibahmadniaz@gmail.com",
+    "role": "super_admin",
+    "passwordSalt": "a8f5f167f44f4964e6c998dee827110c",
+    "passwordHash": "851fedf407b50f3605d16efe4c34c0f83d4ba193fbf592411afa0daf92a5916a13a35fcae11915f11f9652743d1cabcb2d014853557626206e57adf12fd824fd",
+    "createdAt": "2026-11-09T21:35:28.061Z",
+    "updatedAt": "2026-11-09T21:35:28.062Z",
+    "lastLoginAt": "2026-11-09T22:54:43.078Z"
+  },
+  "sessions": {
+    "835b1839f46c3537f98d99f64de87b45eb5a7d8c18eab9b314fba626e73d89ee": {
+      "sessionId": "835b1839f46c3537f98d99f64de87b45eb5a7d8c18eab9b314fba626e73d89ee",
+      "adminId": "admin_primary_01",
+      "username": "noonnashpati",
+      "email": "shahzaibahmadniaz@gmail.com",
+      "role": "super_admin",
+      "rememberMe": true,
+      "createdAt": 1794263546723,
+      "expiresAt": 1796855546723,
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.8059.12 Safari/537.36"
+    },
+    "4f8321c1616105810b3fcb05a38187f22e7c8d98b11b671dd34e3f3f99da040e": {
+      "sessionId": "4f8321c1616105810b3fcb05a38187f22e7c8d98b11b671dd34e3f3f99da040e",
+      "adminId": "admin_primary_01",
+      "username": "noonnashpati",
+      "email": "shahzaibahmadniaz@gmail.com",
+      "role": "super_admin",
+      "rememberMe": true,
+      "createdAt": 1794264883015,
+      "expiresAt": 1796856883015,
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.8059.12 Safari/537.36"
+    }
+  },
+  "resetChallenges": [],
+  "auditLogs": [
+    {
+      "id": "audit_1794264883078_c29357",
+      "timestamp": "2026-11-09T22:54:43.078Z",
+      "event": "LOGIN_SUCCESS",
+      "actor": "noonnashpati",
+      "ipAddress": "127.0.0.1",
+      "details": "Authenticated session created (Remember Me: 30d)."
+    },
+    {
+      "id": "audit_1794263546792_666d88",
+      "timestamp": "2026-11-09T22:32:26.792Z",
+      "event": "LOGIN_SUCCESS",
+      "actor": "noonnashpati",
+      "ipAddress": "127.0.0.1",
+      "details": "Authenticated session created (Remember Me: 30d)."
+    },
+    {
+      "id": "audit_1794260264681_02cf58",
+      "timestamp": "2026-11-09T21:37:44.682Z",
+      "event": "LOGOUT",
+      "actor": "noonnashpati",
+      "ipAddress": "127.0.0.1",
+      "details": "Admin session explicitly revoked on logout."
+    },
+    {
+      "id": "audit_1794260251612_74a213",
+      "timestamp": "2026-11-09T21:37:31.612Z",
+      "event": "LOGIN_SUCCESS",
+      "actor": "noonnashpati",
+      "ipAddress": "127.0.0.1",
+      "details": "Authenticated session created (Remember Me: 30d)."
+    },
+    {
+      "id": "audit_1794260128062",
+      "timestamp": "2026-11-09T21:35:28.062Z",
+      "event": "LOGIN_SUCCESS",
+      "actor": "system_bootstrap",
+      "ipAddress": "127.0.0.1",
+      "details": "Initialized cryptographic scrypt admin vault for noonnashpati (shahzaibahmadniaz@gmail.com)."
+    }
+  ]
+}
